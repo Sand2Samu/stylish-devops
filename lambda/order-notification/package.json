@@ -1,0 +1,12 @@
+{
+    "name": "order-notification-lambda",
+    "version": "1.0.0",
+    "description": "AWS Lambda function for order email notifications",
+    "main": "index.js",
+    "scripts": {
+        "zip": "zip -r function.zip index.js node_modules"
+    },
+    "dependencies": {
+        "@aws-sdk/client-ses": "^3.400.0"
+    }
+}

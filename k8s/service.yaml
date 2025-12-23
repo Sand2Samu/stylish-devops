@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: stylish-service
+  namespace: stylish
+  labels:
+    app: stylish
+spec:
+  type: LoadBalancer  # Creates an AWS ELB in EKS
+  selector:
+    app: stylish
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80          # External port
+      targetPort: 3000  # Container port
