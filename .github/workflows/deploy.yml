@@ -1,0 +1,41 @@
+name: Deploy to AWS
+on:
+  push:
+    branches:
+      - main  # Or 'master', check your branch name!
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.AWS_HOST }}
+          username: ${{ secrets.AWS_USERNAME }}
+          key: ${{ secrets.AWS_KEY }}
+          script: |
+            # 1. Stop old containers (Ignore errors if they don't exist)
+            sudo docker stop app_cloud || true
+            sudo docker rm app_cloud || true
+            
+            # 2. Get latest code
+            cd ~/stylish-devops
+            git pull origin main
+            
+            # 3. ENTER THE SERVER FOLDER (Crucial Fix!)
+            cd Server
+            
+            # 4. Build the image (Now it will find the Dockerfile)
+            sudo docker build --no-cache -t stylish-devops:latest .
+            
+            # 5. Run the new container
+            sudo docker run -d -p 80:3000 \
+              --name app_cloud \
+              -e PORT=3000 \
+              -e MONGODB_URI="mongodb+srv://admin:Khan4499@cluster0.e8q2lqv.mongodb.net/stylish-devops?retryWrites=true&w=majority" \
+              -e JWT_SECRET=secret123 \
+              stylish-devops:latest

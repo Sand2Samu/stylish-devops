@@ -26,7 +26,8 @@ spec:
         - name: stylish
           # Replace with your ECR image URL after pushing
           image: stylish-app:latest
-          imagePullPolicy: Never  # Use local image (change to Always for production)
+          imagePullPolicy: Always
+          # Use local image (change to Always for production)
           ports:
             - containerPort: 3000
               protocol: TCP
