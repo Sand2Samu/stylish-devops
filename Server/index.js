@@ -32,13 +32,33 @@ mongoose.connect(process.env.MONGODB_URI || "mongodb://localhost:27017/stylish",
 
 // --- Middleware (Applied ONCE to the app instance) ---
 app.use(express.json()); // To parse JSON request bodies
-app.use(express.static(path.join(__dirname, 'public'))); // To serve static files
+app.use(express.static(path.join(__dirname, 'public'), { maxAge: 0, etag: false })); // To serve static files - caching disabled
+
+// DEBUG: Check file paths
+const fs = require('fs');
+app.get("/debug/paths", (req, res) => {
+    const publicDir = path.join(__dirname, 'public');
+    const scriptPath = path.join(publicDir, 'js', 'Script2.js');
+    let fileContent = '';
+    try {
+        fileContent = fs.readFileSync(scriptPath, 'utf8').substring(0, 500);
+    } catch (e) {
+        fileContent = 'Error: ' + e.message;
+    }
+    res.json({
+        __dirname: __dirname,
+        publicDir: publicDir,
+        scriptPath: scriptPath,
+        fileExists: fs.existsSync(scriptPath),
+        fileContentStart: fileContent
+    });
+});
 
 // --- Health Check Endpoints for Kubernetes ---
 // Liveness probe - checks if the app is running
 app.get("/health", (req, res) => {
-    res.status(200).json({ 
-        status: "ok", 
+    res.status(200).json({
+        status: "ok",
         timestamp: new Date().toISOString(),
         uptime: process.uptime()
     });
@@ -50,22 +70,22 @@ app.get("/ready", async (req, res) => {
         // Check MongoDB connection
         const dbState = mongoose.connection.readyState;
         if (dbState === 1) { // 1 = connected
-            res.status(200).json({ 
-                status: "ready", 
+            res.status(200).json({
+                status: "ready",
                 database: "connected",
                 timestamp: new Date().toISOString()
             });
         } else {
-            res.status(503).json({ 
-                status: "not ready", 
+            res.status(503).json({
+                status: "not ready",
                 database: "disconnected",
                 timestamp: new Date().toISOString()
             });
         }
     } catch (error) {
-        res.status(503).json({ 
-            status: "not ready", 
-            error: error.message 
+        res.status(503).json({
+            status: "not ready",
+            error: error.message
         });
     }
 });
@@ -73,7 +93,7 @@ app.get("/ready", async (req, res) => {
 // --- Route to serve your index.html (from the project root) ---
 app.get("/", (req, res) => {
     const filePath = path.join(__dirname, "index.html");
-    res.sendFile(filePath, function(err) {
+    res.sendFile(filePath, function (err) {
         if (err) {
             console.error("Error sending index.html:", err);
             if (!res.headersSent) {
@@ -290,7 +310,7 @@ app.post("/api/users/login", async (req, res) => {
                     console.error("Error signing JWT:", err);
                     // This throw will be caught by the outer try-catch if it's an unexpected error
                     // For known jwt errors, they might have specific names to check
-                    return res.status(500).json({ message: "Could not sign token."});
+                    return res.status(500).json({ message: "Could not sign token." });
                 }
                 console.log("JWT generated successfully for user:", user.email);
                 res.json({
@@ -380,25 +400,25 @@ dbConnection.on('error', (err) => {
     console.error('MongoDB runtime connection error:', err);
 });
 
-dbConnection.once('open', function() {
-  app.listen(port, () => {
-      console.log(`Server running on http://localhost:${port}`);
-      console.log("MongoDB connection open and ready.");
-  });
+dbConnection.once('open', function () {
+    app.listen(port, () => {
+        console.log(`Server running on http://localhost:${port}`);
+        console.log("MongoDB connection open and ready.");
+    });
 });
 
 // Graceful shutdown (ONCE)
 process.on('SIGINT', async () => {
-  console.log('SIGINT signal received. Closing HTTP server and MongoDB connection...');
-  // Close server first to stop accepting new connections
-  const server = app.get('server'); // We'd need to store the server instance if we want to close it gracefully
-                                   // For now, just closing DB and exiting.
-  try {
-    await mongoose.connection.close();
-    console.log('MongoDB connection closed.');
-    process.exit(0);
-  } catch (err) {
-    console.error('Error during shutdown:', err);
-    process.exit(1);
-  }
+    console.log('SIGINT signal received. Closing HTTP server and MongoDB connection...');
+    // Close server first to stop accepting new connections
+    const server = app.get('server'); // We'd need to store the server instance if we want to close it gracefully
+    // For now, just closing DB and exiting.
+    try {
+        await mongoose.connection.close();
+        console.log('MongoDB connection closed.');
+        process.exit(0);
+    } catch (err) {
+        console.error('Error during shutdown:', err);
+        process.exit(1);
+    }
 });

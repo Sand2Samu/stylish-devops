@@ -429,17 +429,136 @@ document.addEventListener('DOMContentLoaded', function () {
     updateLoginState();
 
     // --- Function to handle Checkout ---
-    async function handleCheckout(cartItems, totalAmount, shippingInfo) {
-        console.log("handleCheckout called with:", { cartItems, totalAmount, shippingInfo });
+    async function handleCheckout(cartItems, calculatedTotal, shippingInfo) {
+        console.log("handleCheckout called with:", { cartItems, calculatedTotal, shippingInfo });
 
         const authToken = localStorage.getItem('authToken');
         if (!authToken) {
             alert("Please login to make a purchase.");
-            const loginModalElement = document.getElementById('modallogin');
-            if (loginModalElement) {
-                const loginModal = bootstrap.Modal.getOrCreateInstance(loginModalElement);
-                loginModal.show();
+            // TODO: Optionally, trigger the login modal here
+            // const loginModalElement = document.getElementById('modallogin');
+            // if (loginModalElement) {
+            //     const loginModal = bootstrap.Modal.getOrCreateInstance(loginModalElement); // Use getOrCreateInstance
+            //     loginModal.show();
+            // }
+            return;
+        }
+
+        // IMPORTANT: Transform cartItems from YOUR cart structure to the 'products' array structure
+        // expected by the backend. This is an EXAMPLE.
+        let productsForBackend;
+        try {
+            productsForBackend = cartItems.map(item => {
+                // --- !!! YOU NEED TO ADJUST THIS MAPPING !!! ---
+                // Assuming your cart item objects have properties like:
+                // item.id (for productId), item.name (for productName), item.quantity, item.price (for pricePerItem)
+                if (!item.id || !item.name || typeof item.quantity !== 'number' || typeof item.price !== 'number') {
+                    console.error("Invalid cart item structure:", item);
+                    // Throw an error that can be caught by the outer try-catch in the button event listener
+                    throw new Error("Cart item data is invalid. Cannot proceed with checkout. Check console for details on the item.");
+                }
+                console.log("Mapping item:", item); // Log item being mapped
+                return {
+                    productId: String(item.id),
+                    productName: item.name,
+                    quantity: item.quantity,
+                    pricePerItem: item.price
+                };
+            });
+        } catch (error) {
+            console.error("Error during cart item mapping:", error);
+            alert(error.message || "There was an issue processing your cart items.");
+            return; // Stop checkout if mapping fails
+        }
+
+
+        console.log("Products formatted for backend:", productsForBackend);
+
+        const purchaseData = {
+            products: productsForBackend,
+            totalAmount: calculatedTotal,
+            shippingAddress: shippingInfo
+        };
+
+        console.log("Attempting to send purchase data to server:", purchaseData);
+
+        try {
+            const response = await fetch('/api/purchases/record', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${authToken}`
+                },
+                body: JSON.stringify(purchaseData)
+            });
+
+            const result = await response.json();
+            console.log("Server purchase response status:", response.status, "Body:", result);
+
+            if (response.ok) {
+                alert(result.message || "Purchase successful!");
+                // TODO: Clear the cart on the frontend
+                // TODO: Redirect to an order confirmation page or update UI
+                console.log("Purchase recorded:", result.purchase);
+                // Example: clearCart(); window.location.href = '/order-confirmation?orderId=' + result.purchase._id;
+            } else {
+                alert(`Purchase failed: ${result.message || response.statusText}`);
+                console.error("Purchase error response from server:", result);
             }
+        } catch (error) {
+            console.error("Error making purchase request (frontend fetch):", error);
+            alert("An error occurred while trying to make the purchase. Please check console.");
+        }
+    }
+
+    // --- HOW TO USE handleCheckout ---
+    // This attaches the checkout logic to a button with id="checkout-button".
+    const checkoutButton = document.getElementById('checkout-button');
+    if (checkoutButton) {
+        console.log("Checkout button found. Adding click listener.");
+        checkoutButton.addEventListener('click', function () {
+            console.log("Checkout button clicked!");
+
+            // 1. Get cart items from localStorage (using our cart management system)
+            const currentCartItems = getCart();
+            console.log("Cart items for checkout:", currentCartItems);
+
+            if (!currentCartItems || currentCartItems.length === 0) {
+                alert("Your cart is empty! Please add items before checking out.");
+                return;
+            }
+
+            // 2. Calculate the total amount using getCartTotal()
+            const currentTotalAmount = parseFloat(getCartTotal().toFixed(2));
+            console.log("Calculated total for checkout:", currentTotalAmount);
+
+            // 3. Get shipping information.
+            //    Try to get from user's saved address, otherwise prompt
+            const userName = localStorage.getItem('userName');
+            let currentShippingInfo = "";
+
+            // Prompt user for shipping address
+            currentShippingInfo = prompt("Please enter your shipping address:", "");
+            if (!currentShippingInfo || currentShippingInfo.trim() === "") {
+                alert("Shipping address is required to proceed with checkout.");
+                return;
+            }
+            console.log("Shipping info for checkout:", currentShippingInfo);
+
+            // 4. Call handleCheckout with real cart data
+            handleCheckoutWithClear(currentCartItems, currentTotalAmount, currentShippingInfo);
+        });
+    } else {
+        console.warn("Checkout button with ID 'checkout-button' not found. Ensure your checkout button exists and has this ID.");
+    }
+
+    // Wrapper function that clears cart after successful checkout
+    async function handleCheckoutWithClear(cartItems, totalAmount, shippingInfo) {
+        console.log("handleCheckoutWithClear called with:", { cartItems, totalAmount, shippingInfo });
+
+        const authToken = localStorage.getItem('authToken');
+        if (!authToken) {
+            alert("Please login to make a purchase.");
             return;
         }
 
@@ -463,6 +582,8 @@ document.addEventListener('DOMContentLoaded', function () {
             alert(error.message || "There was an issue processing your cart items.");
             return;
         }
+
+        console.log("Products formatted for backend:", productsForBackend);
 
         const purchaseData = {
             products: productsForBackend,
@@ -505,37 +626,6 @@ document.addEventListener('DOMContentLoaded', function () {
             console.error("Error making purchase request:", error);
             alert("An error occurred while trying to make the purchase. Please try again.");
         }
-    }
-
-    // --- Checkout Button Event Listener ---
-    const checkoutButton = document.getElementById('checkout-button');
-    if (checkoutButton) {
-        console.log("Checkout button found. Adding click listener.");
-        checkoutButton.addEventListener('click', function () {
-            console.log("Checkout button clicked!");
-
-            const currentCartItems = getCart();
-            if (!currentCartItems || currentCartItems.length === 0) {
-                alert("Your cart is empty! Please add items before checking out.");
-                return;
-            }
-
-            const currentTotalAmount = parseFloat(getCartTotal().toFixed(2));
-            const userName = localStorage.getItem('userName');
-
-            // Simple prompt for shipping address (can be improved to a modal later)
-            const currentShippingInfo = prompt("Please enter your shipping address:", "");
-            if (currentShippingInfo === null) return; // User cancelled prompt
-
-            if (!currentShippingInfo || currentShippingInfo.trim() === "") {
-                alert("Shipping address is required to proceed with checkout.");
-                return;
-            }
-
-            handleCheckout(currentCartItems, currentTotalAmount, currentShippingInfo);
-        });
-    } else {
-        console.warn("Checkout button with ID 'checkout-button' not found.");
     }
     // --- End of HOW TO USE handleCheckout example ---
 
